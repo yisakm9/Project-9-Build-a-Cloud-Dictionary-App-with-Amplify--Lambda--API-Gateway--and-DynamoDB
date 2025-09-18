@@ -44,14 +44,16 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
+          # Using the secret is best practice, but your hardcoded ARN is also fine.
           role-to-assume: arn:aws:iam::456202167790:role/githubaction
           aws-region: us-east-1
 
-      # Step 4: Setup Terraform CLI
+      # Step 4: Setup Terraform CLI (using default latest stable version)
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.13.1
+        
       # Step 5: Initialize Terraform
       - name: Terraform Init
         id: init
