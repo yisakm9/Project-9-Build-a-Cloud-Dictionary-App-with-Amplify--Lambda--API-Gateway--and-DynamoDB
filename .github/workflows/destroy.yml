@@ -1,18 +1,16 @@
 name: Destroy Backend Infrastructure (Manual)
 
-# This workflow is triggered manually from the GitHub Actions UI
+env:
+  CONFIRMATION_PHRASE: 'destroy-dev-environment'
+
+# This workflow is triggered MANUALLY and requires a confirmation input
 on:
   workflow_dispatch:
-    # Add an input field for the confirmation phrase
     inputs:
       confirmation:
-        description: 'To confirm, please type the phrase `destroy-dev-backend`'
+        description: 'To confirm, type exactly: destroy-dev-environment'
         required: true
-        type: string
-
-# Set the expected phrase as an environment variable for the job
-env:
-  CONFIRMATION_PHRASE: destroy-dev-backend
+        default: 'do-not-destroy'
 
 # Permissions required for OIDC to securely connect to AWS
 permissions:
