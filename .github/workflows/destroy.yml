@@ -3,7 +3,6 @@ name: Destroy Backend Infrastructure (Manual)
 env:
   CONFIRMATION_PHRASE: 'destroy-dev-environment'
 
-# This workflow is triggered MANUALLY and requires a confirmation input
 on:
   workflow_dispatch:
     inputs:
@@ -12,7 +11,6 @@ on:
         required: true
         default: 'do-not-destroy'
 
-# Permissions required for OIDC to securely connect to AWS
 permissions:
   id-token: write
   contents: read
@@ -22,9 +20,11 @@ jobs:
     name: "Terraform Destroy"
     runs-on: ubuntu-latest  
     
+    # REMOVED the entire 'defaults' block from here.
+    # Each step will now run from the repository root by default.
 
     steps:
-      # Step 1: Verify the confirmation phrase to prevent accidental runs
+      # This step now runs from the root, where it should.
       - name: 'Verify Destroy Confirmation'
         run: |
           if [ "${{ github.event.inputs.confirmation }}" != "${{ env.CONFIRMATION_PHRASE }}" ]; then
@@ -34,35 +34,30 @@ jobs:
             echo "✅ Confirmation phrase matches. Proceeding with destroy operation."
           fi
 
-      # Step 2: Check out the repository's code
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Step 3: Configure AWS credentials using OIDC
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          # Using the secret is best practice, but your hardcoded ARN is also fine.
           role-to-assume: arn:aws:iam::456202167790:role/githubaction
           aws-region: us-east-1
 
-      # Step 4: Setup Terraform CLI (using default latest stable version)
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.13.1
         
-      # Step 5: Initialize Terraform
+      # ADDED 'working-directory' to each Terraform step.
       - name: Terraform Init
         id: init
         run: terraform init
         working-directory: ./backend/environments/dev
-      # Step 6: Validate the Terraform configuration
+
       - name: Terraform Validate
         id: validate
         run: terraform validate -no-color
+        working-directory: ./backend/environments/dev
         
-      # Step 7: Destroy the infrastructure
       - name: Terraform Destroy
         id: destroy
         run: terraform destroy -auto-approve
+        working-directory: ./backend/environments/dev
