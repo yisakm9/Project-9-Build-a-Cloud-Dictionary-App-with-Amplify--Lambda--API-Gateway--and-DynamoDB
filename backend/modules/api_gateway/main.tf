@@ -73,6 +73,7 @@ resource "aws_lambda_permission" "api_gateway_permission" {
   function_name = var.lambda_function_arn
   principal     = "apigateway.amazonaws.com"
 
-  # Restrict the permission to only this specific API's GET method
-  source_arn = "${aws_api_gateway_rest_api.dictionary_api.execution_arn}/*/${aws_api_gateway_method.get_definition_method.http_method}${aws_api_gateway_resource.definition_resource.path}${aws_api_gateway_resource.term_resource.path}"
+  # THIS IS THE CORRECTED LINE:
+  # It correctly references the full path of the final endpoint resource.
+  source_arn = "${aws_api_gateway_rest_api.dictionary_api.execution_arn}/*/${aws_api_gateway_method.get_definition_method.http_method}${aws_api_gateway_resource.term_resource.path}"
 }
