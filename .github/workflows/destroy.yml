@@ -12,7 +12,7 @@ on:
 
 # Set the expected phrase as an environment variable for the job
 env:
-  CONFIRMATION_PHRASE: 'destroy-dev-backend'
+  CONFIRMATION_PHRASE: destroy-dev-backend
 
 # Permissions required for OIDC to securely connect to AWS
 permissions:
