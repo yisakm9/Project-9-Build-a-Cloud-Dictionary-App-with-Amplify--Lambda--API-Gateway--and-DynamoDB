@@ -40,15 +40,25 @@ resource "aws_api_gateway_integration" "lambda_integration" {
 resource "aws_api_gateway_deployment" "api_deployment" {
   rest_api_id = aws_api_gateway_rest_api.dictionary_api.id
 
-  # A lifecycle block ensures a new deployment is created on any change
+  # ADD THIS BLOCK to automatically redeploy on changes
+  triggers = {
+    redeployment = sha1(jsonencode([
+      aws_api_gateway_resource.definition_resource.id,
+      aws_api_gateway_resource.term_resource.id,
+      aws_api_gateway_method.get_definition_method.id,
+      aws_api_gateway_integration.lambda_integration.id,
+    ]))
+  }
+  # END OF BLOCK TO ADD
+
   lifecycle {
     create_before_destroy = true
   }
 
-  # This depends on the method and integration being set up first
+  # The explicit depends_on is no longer necessary because of the triggers,
+  # but it doesn't hurt to leave it for clarity.
   depends_on = [aws_api_gateway_integration.lambda_integration]
 }
-
 # Create a stage (e.g., 'v1') to host the deployment
 resource "aws_api_gateway_stage" "api_stage" {
   deployment_id = aws_api_gateway_deployment.api_deployment.id
