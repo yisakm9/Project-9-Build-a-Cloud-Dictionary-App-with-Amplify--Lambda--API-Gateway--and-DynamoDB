@@ -33,7 +33,7 @@ resource "aws_api_gateway_integration" "lambda_integration" {
   http_method             = aws_api_gateway_method.get_definition_method.http_method
   integration_http_method = "POST" # Must be POST for Lambda proxy integration
   type                    = "AWS_PROXY"
-  uri                     = var.lambda_function_arn
+  uri                     = var.lambda_invoke_arn 
 }
 
 # Create a deployment to make the API callable

@@ -27,4 +27,5 @@ module "api_gateway" {
 
   api_name            = "CloudDictionaryAPI-dev"
   lambda_function_arn = module.lambda.function_arn
+  lambda_invoke_arn   = module.lambda.invoke_arn
 }

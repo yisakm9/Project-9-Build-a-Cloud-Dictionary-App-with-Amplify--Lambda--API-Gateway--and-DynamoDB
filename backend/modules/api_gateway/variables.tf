@@ -4,6 +4,11 @@ variable "api_name" {
 }
 
 variable "lambda_function_arn" {
-  description = "The ARN of the Lambda function to integrate with"
+  description = "The standard ARN of the Lambda function (for permissions)"
+  type        = string
+}
+
+variable "lambda_invoke_arn" {
+  description = "The invocation ARN of the Lambda function (for integration)"
   type        = string
 }
