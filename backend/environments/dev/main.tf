@@ -21,3 +21,10 @@ module "lambda" {
   iam_role_arn  = module.iam.role_arn
   table_name    = module.dynamodb.table_name
 }
+# Module to create the API Gateway
+module "api_gateway" {
+  source = "../../modules/api_gateway"
+
+  api_name            = "CloudDictionaryAPI-dev"
+  lambda_function_arn = module.lambda.function_arn
+}
