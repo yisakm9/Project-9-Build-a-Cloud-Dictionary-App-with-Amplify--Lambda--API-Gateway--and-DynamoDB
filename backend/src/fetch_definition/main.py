@@ -11,6 +11,7 @@ def handler(event, context):
     """
     Handles API Gateway requests to fetch a dictionary definition.
     """
+    print(f"Received event: {json.dumps(event)}")
     # The 'term' is expected to be a path parameter
     term = event.get('pathParameters', {}).get('term')
 
