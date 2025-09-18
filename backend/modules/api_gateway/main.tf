@@ -40,7 +40,7 @@ resource "aws_api_gateway_integration" "lambda_integration" {
 resource "aws_api_gateway_deployment" "api_deployment" {
   rest_api_id = aws_api_gateway_rest_api.dictionary_api.id
 
-  # ADD THIS BLOCK to automatically redeploy on changes
+  # This block is the fix. Ensure it is present.
   triggers = {
     redeployment = sha1(jsonencode([
       aws_api_gateway_resource.definition_resource.id,
@@ -49,11 +49,11 @@ resource "aws_api_gateway_deployment" "api_deployment" {
       aws_api_gateway_integration.lambda_integration.id,
     ]))
   }
-  # END OF BLOCK TO ADD
 
   lifecycle {
     create_before_destroy = true
   }
+
 
   # The explicit depends_on is no longer necessary because of the triggers,
   # but it doesn't hurt to leave it for clarity.
