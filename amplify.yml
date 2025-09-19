@@ -8,6 +8,11 @@ frontend:
     build:
       commands:
         - npm run build
+        # --- START OF DEBUG COMMAND ---
+        # This command will list all files and folders after the build.
+        # It will prove if the 'build' directory and 'index.html' were created.
+        - ls -lR
+        # --- END OF DEBUG COMMAND ---
   artifacts:
     baseDirectory: frontend/build
     files:
