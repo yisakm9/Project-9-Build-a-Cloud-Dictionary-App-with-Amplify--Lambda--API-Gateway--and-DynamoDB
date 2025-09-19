@@ -32,6 +32,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.13.1
+          
       - name: Terraform Init
         run: terraform init
         working-directory: ./backend/environments/dev
@@ -44,12 +45,18 @@ jobs:
         run: terraform apply -auto-approve tfplan
         working-directory: ./backend/environments/dev
 
+      
+      # It uses heredoc syntax to correctly handle the multi-line JSON output from Terraform.
       - name: Get Terraform Outputs
         id: terraform_output
-        run: echo "json_output=$(terraform output -json)" >> $GITHUB_OUTPUT
+        run: |
+          {
+            echo 'json_output<<EOF'
+            terraform output -json
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
         working-directory: ./backend/environments/dev
 
-      # --- NEW AUTOMATED SEEDING STEP ---
       - name: Seed DynamoDB Table
         env:
           TABLE_NAME: ${{ fromJson(steps.terraform_output.outputs.json_output).dynamodb_table_name.value }}
