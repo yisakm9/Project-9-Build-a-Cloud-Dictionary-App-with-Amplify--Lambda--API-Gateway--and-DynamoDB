@@ -15,10 +15,3 @@ frontend:
   cache:
     paths:
       - frontend/node_modules/**/*
-# --- START OF POST-BUILD DEBUG ---
-# This will run after the build and show us if the artifacts exist.
-postBuild:
-  commands:
-    - echo "--- Listing files in the build directory for verification ---"
-    - ls -lR frontend/build
-# --- END OF POST-BUILD DEBUG ---
