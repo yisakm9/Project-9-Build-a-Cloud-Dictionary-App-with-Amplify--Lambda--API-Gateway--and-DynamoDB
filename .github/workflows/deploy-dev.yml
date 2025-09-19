@@ -1,4 +1,4 @@
-name: Deploy Full Stack Application
+name: Deploy Backend to Dev and Trigger Frontend
 
 on:
   push:
@@ -6,8 +6,7 @@ on:
       - main
     paths:
       - 'backend/**'
-      - 'frontend/**'
-      - 'data/**'
+      - 'data/**' # Also trigger if the data template changes
   workflow_dispatch:
 
 permissions:
@@ -15,105 +14,73 @@ permissions:
   contents: read
 
 jobs:
-  check-changes:
-    name: Check for File Changes
+  terraform:
+    name: "Terraform Apply and Trigger Frontend"
     runs-on: ubuntu-latest
-    outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
+    
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            backend:
-              - 'backend/**'
-              - 'data/**'
-            frontend:
-              - 'frontend/**'
-
-  deploy-backend:
-    name: Deploy Backend
-    runs-on: ubuntu-latest
-    needs: check-changes
-    if: needs.check-changes.outputs.backend == 'true'
-    outputs:
-      api_url: ${{ steps.get_outputs.outputs.api_url }}
-      table_name: ${{ steps.get_outputs.outputs.table_name }}
-    steps:
-      # ... (all backend steps remain exactly the same) ...
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::456202167790:role/githubaction
           aws-region: us-east-1
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.13.1
-      - name: Terraform Init, Plan, and Apply
+      - name: Terraform Init
+        run: terraform init
         working-directory: ./backend/environments/dev
-        run: |
-          terraform init
-          terraform plan -out=tfplan
-          terraform apply -auto-approve tfplan
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+        working-directory: ./backend/environments/dev
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+        working-directory: ./backend/environments/dev
+
       - name: Get Terraform Outputs
-        id: get_outputs
+        id: terraform_output
+        run: echo "json_output=$(terraform output -json)" >> $GITHUB_OUTPUT
         working-directory: ./backend/environments/dev
-        run: |
-          API_URL=$(terraform output -raw api_invoke_url)
-          TABLE_NAME=$(terraform output -raw dynamodb_table_name)
-          echo "api_url=$API_URL" >> $GITHUB_OUTPUT
-          echo "table_name=$TABLE_NAME" >> $GITHUB_OUTPUT
+
+      # --- NEW AUTOMATED SEEDING STEP ---
       - name: Seed DynamoDB Table
         env:
-          TABLE_NAME: ${{ steps.get_outputs.outputs.table_name }}
+          TABLE_NAME: ${{ fromJson(steps.terraform_output.outputs.json_output).dynamodb_table_name.value }}
         run: |
+          echo "Starting database seed for table: $TABLE_NAME"
           chmod +x ./data/seed_database.sh
           ./data/seed_database.sh "$TABLE_NAME"
 
-  deploy-frontend:
-    name: Deploy Frontend
-    runs-on: ubuntu-latest
-    needs: [check-changes, deploy-backend]
-    if: |
-      always() && (
-        needs.check-changes.outputs.frontend == 'true' ||
-        needs.deploy-backend.result == 'success'
-      )
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::456202167790:role/githubaction
-          aws-region: us-east-1
-          
-      # --- COMBINED LOOKUP, UPDATE, and TRIGGER STEP ---
-      - name: Deploy Amplify Frontend
-        env:
-          API_URL: ${{ needs.deploy-backend.outputs.api_url }}
+      - name: Look up Amplify App ID
+        id: lookup_app_id
         run: |
-          echo "Looking up Amplify App ID..."
           APP_ID=$(aws amplify list-apps | jq -r '.apps[] | select(.name == "Project-9-intermediate-level-Cloud-Dictionary-App") | .appId')
-          
-          if [ -z "$APP_ID" ]; then
-            echo "::error::Could not find Amplify App ID for 'Project-9-intermediate-level-Cloud-Dictionary-App'. Aborting."
-            exit 1
-          fi
           echo "Found Amplify App ID: $APP_ID"
+          echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
 
-          # Only update environment variables if a new API_URL was provided from the backend job
-          if [ -n "$API_URL" ]; then
-            echo "Updating Amplify App ID: $APP_ID with new API URL."
-            aws amplify update-app --app-id "$APP_ID" --environment-variables "VITE_API_URL=$API_URL"
-          else
-            echo "No backend changes detected. Skipping environment variable update."
-          fi
-          
+      - name: Update Amplify Environment Variable
+        env:
+          API_URL: ${{ fromJson(steps.terraform_output.outputs.json_output).api_invoke_url.value }}
+          APP_ID: ${{ steps.lookup_app_id.outputs.app_id }}
+        run: |
+          echo "Updating Amplify App ID: $APP_ID with URL: $API_URL"
+          aws amplify update-app \
+            --app-id "$APP_ID" \
+            --environment-variables "VITE_API_URL=$API_URL"
+
+      - name: Trigger Amplify Frontend Build
+        env:
+          APP_ID: ${{ steps.lookup_app_id.outputs.app_id }}
+        run: |
           echo "Starting new build for Amplify App ID: $APP_ID"
-          aws amplify start-job --app-id "$APP_ID" --branch-name main --job-type 'RELEASE'
+          aws amplify start-job \
+            --app-id "$APP_ID" \
+            --branch-name main \
+            --job-type 'RELEASE'
