@@ -1,4 +1,4 @@
-name: Deploy Backend to Dev and Trigger Frontend
+name: Deploy Full Stack Application
 
 on:
   push:
@@ -6,7 +6,8 @@ on:
       - main
     paths:
       - 'backend/**'
-      - 'data/**' # Also trigger if the data template changes
+      - 'frontend/**'
+      - 'data/**'
   workflow_dispatch:
 
 permissions:
@@ -14,10 +15,22 @@ permissions:
   contents: read
 
 jobs:
-  terraform:
-    name: "Terraform Apply and Trigger Frontend"
+  # Job to deploy the backend infrastructure
+  deploy-backend:
+    name: Deploy Backend
     runs-on: ubuntu-latest
-    
+    # This job only runs if backend or data files were changed
+    if: |
+      startsWith(github.event.head_commit.message, 'feat(backend)') ||
+      startsWith(github.event.head_commit.message, 'fix(backend)') ||
+      startsWith(github.event.head_commit.message, 'refactor(backend)') ||
+      startsWith(github.event.head_commit.message, 'build(backend)') ||
+      startsWith(github.event.head_commit.message, 'chore(data)')
+      
+    outputs:
+      api_url: ${{ steps.get_outputs.outputs.api_url }}
+      table_name: ${{ steps.get_outputs.outputs.table_name }}
+      
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,56 +44,81 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-            terraform_version: 1.13.1 
-      - name: Terraform Init
-        run: terraform init
-        working-directory: ./backend/environments/dev
+          terraform_version: 1.13.1
 
-      - name: Terraform Plan
-        run: terraform plan -out=tfplan
+      - name: Terraform Init, Plan, and Apply
         working-directory: ./backend/environments/dev
-
-      - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan
-        working-directory: ./backend/environments/dev
+        run: |
+          terraform init
+          terraform plan -out=tfplan
+          terraform apply -auto-approve tfplan
 
       - name: Get Terraform Outputs
-        id: terraform_output
-        run: echo "json_output=$(terraform output -json)" >> $GITHUB_OUTPUT
+        id: get_outputs
         working-directory: ./backend/environments/dev
+        run: |
+          API_URL=$(terraform output -raw api_invoke_url)
+          TABLE_NAME=$(terraform output -raw dynamodb_table_name)
+          echo "api_url=$API_URL" >> $GITHUB_OUTPUT
+          echo "table_name=$TABLE_NAME" >> $GITHUB_OUTPUT
 
-      
       - name: Seed DynamoDB Table
         env:
-          TABLE_NAME: ${{ fromJson(steps.terraform_output.outputs.json_output).dynamodb_table_name.value }}
+          TABLE_NAME: ${{ steps.get_outputs.outputs.table_name }}
         run: |
-          echo "Starting database seed for table: $TABLE_NAME"
           chmod +x ./data/seed_database.sh
           ./data/seed_database.sh "$TABLE_NAME"
 
-      - name: Look up Amplify App ID
-        id: lookup_app_id
+  # Job to deploy the frontend application
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    # This job runs if frontend files changed OR if the backend was just deployed
+    needs: deploy-backend
+    if: always() # Ensures this job runs to check the conditions below
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::456202167790:role/githubaction
+          aws-region: us-east-1
+
+      - name: Check for required deployment
+        id: check_changes
+        run: |
+          # Condition 1: Backend was deployed, so we need the new API URL
+          if [ "${{ needs.deploy-backend.result }}" == "success" ]; then
+            echo "Backend was deployed. Frontend redeployment is required."
+            echo "deploy_required=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          # Condition 2: Frontend files were changed
+          if [ "$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }} | grep '^frontend/')" ]; then
+            echo "Frontend files changed. Frontend deployment is required."
+            echo "deploy_required=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "No changes require a frontend deployment."
+          echo "deploy_required=false" >> $GITHUB_OUTPUT
+
+      - name: Look up Amplify App ID and Update Environment
+        if: steps.check_changes.outputs.deploy_required == 'true'
+        env:
+          API_URL: ${{ needs.deploy-backend.outputs.api_url }}
         run: |
           APP_ID=$(aws amplify list-apps | jq -r '.apps[] | select(.name == "Project-9-intermediate-level-Cloud-Dictionary-App") | .appId')
           echo "Found Amplify App ID: $APP_ID"
+          aws amplify update-app --app-id "$APP_ID" --environment-variables "VITE_API_URL=$API_URL"
           echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
-
-      - name: Update Amplify Environment Variable
-        env:
-          API_URL: ${{ fromJson(steps.terraform_output.outputs.json_output).api_invoke_url.value }}
-          APP_ID: ${{ steps.lookup_app_id.outputs.app_id }}
-        run: |
-          echo "Updating Amplify App ID: $APP_ID with URL: $API_URL"
-          aws amplify update-app \
-            --app-id "$APP_ID" \
-            --environment-variables "VITE_API_URL=$API_URL"
+        id: set_env
 
       - name: Trigger Amplify Frontend Build
+        if: steps.check_changes.outputs.deploy_required == 'true'
         env:
-          APP_ID: ${{ steps.lookup_app_id.outputs.app_id }}
+          APP_ID: ${{ steps.set_env.outputs.app_id }}
         run: |
-          echo "Starting new build for Amplify App ID: $APP_ID"
-          aws amplify start-job \
-            --app-id "$APP_ID" \
-            --branch-name main \
-            --job-type 'RELEASE'
+          aws amplify start-job --app-id "$APP_ID" --branch-name main --job-type 'RELEASE'
