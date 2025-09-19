@@ -1,4 +1,4 @@
-name: Destroy Backend Infrastructure (Manual)
+name: Destroy Full Stack Infrastructure (Manual)
 
 env:
   CONFIRMATION_PHRASE: 'destroy-dev-environment'
@@ -16,15 +16,11 @@ permissions:
   contents: read
 
 jobs:
-  terraform_destroy:
-    name: "Terraform Destroy"
+  full_stack_destroy:
+    name: "Destroy Frontend and Backend"
     runs-on: ubuntu-latest  
-    
-    # REMOVED the entire 'defaults' block from here.
-    # Each step will now run from the repository root by default.
 
     steps:
-      # This step now runs from the root, where it should.
       - name: 'Verify Destroy Confirmation'
         run: |
           if [ "${{ github.event.inputs.confirmation }}" != "${{ env.CONFIRMATION_PHRASE }}" ]; then
@@ -43,22 +39,35 @@ jobs:
           role-to-assume: arn:aws:iam::456202167790:role/githubaction
           aws-region: us-east-1
 
+      # --- NEW FRONTEND DESTROY STEPS ---
+      - name: Look up Amplify App ID
+        id: lookup_app_id
+        run: |
+          APP_ID=$(aws amplify list-apps | jq -r '.apps[] | select(.name == "Project-9-intermediate-level-Cloud-Dictionary-App") | .appId')
+          if [ -z "$APP_ID" ]; then
+            echo "Amplify App not found, skipping deletion."
+            echo "app_id=''" >> $GITHUB_OUTPUT
+          else
+            echo "Found Amplify App ID: $APP_ID"
+            echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Destroy Amplify App
+        if: steps.lookup_app_id.outputs.app_id != ''
+        run: |
+          echo "Deleting Amplify App ID: ${{ steps.lookup_app_id.outputs.app_id }}"
+          aws amplify delete-app --app-id ${{ steps.lookup_app_id.outputs.app_id }}
+
+      # --- BACKEND DESTROY STEPS ---
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-            terraform_version: 1.13.1 
-      
+          terraform_version: 1.13.1
+          
       - name: Terraform Init
-        id: init
         run: terraform init
-        
-
-      - name: Terraform Validate
-        id: validate
-        run: terraform validate -no-color
-        
-        
+        working-directory: ./backend/environments/dev
+      
       - name: Terraform Destroy
-        id: destroy
         run: terraform destroy -auto-approve
-        
+        working-directory: ./backend/environments/dev
