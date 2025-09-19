@@ -45,19 +45,20 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-        
-      # ADDED 'working-directory' to each Terraform step.
+        with:
+            terraform_version: 1.13.1 
+      
       - name: Terraform Init
         id: init
         run: terraform init
-        working-directory: ./backend/environments/dev
+        
 
       - name: Terraform Validate
         id: validate
         run: terraform validate -no-color
-        working-directory: ./backend/environments/dev
+        
         
       - name: Terraform Destroy
         id: destroy
         run: terraform destroy -auto-approve
-        working-directory: ./backend/environments/dev
+        

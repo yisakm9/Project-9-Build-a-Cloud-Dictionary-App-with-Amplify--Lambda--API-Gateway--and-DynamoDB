@@ -1,66 +1,82 @@
-name: Deploy Backend to Dev
+name: Deploy Backend to Dev and Trigger Frontend
 
-# Trigger this workflow on a push to the main branch if files in the backend/ directory have changed.
 on:
   push:
     branches:
       - main
     paths:
       - 'backend/**'
-      - '.github/workflows/deploy-backend-dev.yml'
   workflow_dispatch:
-# Permissions required for OIDC to securely connect to AWS.
+
 permissions:
   id-token: write
   contents: read
 
 jobs:
   terraform:
-    name: "Terraform Apply"
+    name: "Terraform Apply and Trigger Frontend"
     runs-on: ubuntu-latest
-    
-    # All Terraform commands will run from this directory
     defaults:
       run:
         working-directory: ./backend/environments/dev
 
     steps:
-      # Step 1: Check out the repository's code
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Step 2: Configure AWS credentials using OIDC
-      # This step assumes an IAM OIDC provider and role have been created in AWS.
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::456202167790:role/githubaction
-          aws-region: us-east-1 # Must match the region in your provider.tf
+          aws-region: us-east-1
 
-      # Step 3: Setup Terraform CLI
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.13.1
-      # Step 4: Initialize Terraform
-      # Configures the backend, downloads provider plugins.
+            terraform_version: 1.13.1       
+
       - name: Terraform Init
-        id: init
         run: terraform init
 
-      # Step 5: Validate the Terraform configuration
-      - name: Terraform Validate
-        id: validate
-        run: terraform validate -no-color
-
-      # Step 6: Generate a Terraform execution plan
-      # This shows what changes will be made.
       - name: Terraform Plan
-        id: plan
-        run: terraform plan -no-color -out=tfplan
+        run: terraform plan -out=tfplan
 
-      # Step 7: Apply the Terraform plan
-      # This step only runs on the main branch.
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'
         run: terraform apply -auto-approve tfplan
+
+      - name: Get Terraform Outputs
+        id: terraform_output
+        run: echo "json_output=$(terraform output -json)" >> $GITHUB_OUTPUT
+
+      # --- NEW DYNAMIC LOOKUP STEP ---
+      # This step finds the App ID based on the app's name, removing the need for a secret.
+      - name: Look up Amplify App ID
+        id: lookup_app_id
+        # This command must run from the root, so we remove the default working directory
+        working-directory: ./ 
+        run: |
+          APP_ID=$(aws amplify list-apps | jq -r '.apps[] | select(.name == "Project-9-intermediate-level-Cloud-Dictionary-App") | .appId')
+          echo "Found Amplify App ID: $APP_ID"
+          echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
+
+      # --- UPDATED AUTOMATION STEPS ---
+      # These steps now use the output from the lookup step instead of a secret.
+      - name: Update Amplify Environment Variable
+        env:
+          API_URL: ${{ fromJson(steps.terraform_output.outputs.json_output).api_invoke_url.value }}
+          APP_ID: ${{ steps.lookup_app_id.outputs.app_id }}
+        run: |
+          echo "Updating Amplify App ID: $APP_ID with URL: $API_URL"
+          aws amplify update-app \
+            --app-id "$APP_ID" \
+            --environment-variables "VITE_API_URL=$API_URL"
+
+      - name: Trigger Amplify Frontend Build
+        env:
+          APP_ID: ${{ steps.lookup_app_id.outputs.app_id }}
+        run: |
+          echo "Starting new build for Amplify App ID: $APP_ID"
+          aws amplify start-job \
+            --app-id "$APP_ID" \
+            --branch-name main \
+            --job-type 'RELEASE'
