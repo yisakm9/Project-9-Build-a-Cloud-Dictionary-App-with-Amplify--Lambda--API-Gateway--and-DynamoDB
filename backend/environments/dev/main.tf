@@ -5,7 +5,7 @@ module "dynamodb" {
   table_name = "cloud-dictionary-dev"
 }
 
-# Module to the  IAM role  for the  Lambda
+# Module to the  IAM role  for the Lambda
 module "iam" {
   source = "../../modules/iam"
 
