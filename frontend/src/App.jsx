@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import './App.css';
 
-// The App will now read its API URL from an environment variable
-const API_INVOKE_URL = process.env.REACT_APP_API_URL;
+// Vite exposes environment variables using import.meta.env
+const API_INVOKE_URL = import.meta.env.VITE_API_URL;
 
 function App() {
   const [term, setTerm] = useState('');
@@ -19,8 +19,13 @@ function App() {
     setError('');
     setResult(null);
 
+    if (!API_INVOKE_URL) {
+        setError('Error: The API URL is not configured. Please set the VITE_API_URL environment variable.');
+        setLoading(false);
+        return;
+    }
+
     try {
-      // Use the correct URL and the term from the input
       const response = await fetch(`${API_INVOKE_URL}/definition/${term}`);
       
       if (response.status === 404) {
@@ -28,7 +33,8 @@ function App() {
       }
       
       if (!response.ok) {
-        throw new Error('An error occurred while fetching the data.');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'An error occurred while fetching the data.');
       }
 
       const data = await response.json();
