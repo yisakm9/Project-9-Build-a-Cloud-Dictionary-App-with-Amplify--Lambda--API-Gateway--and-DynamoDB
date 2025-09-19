@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import './App.css';
 
-// IMPORTANT: Replace this with the URL from your Terraform output!
-const API_INVOKE_URL = 'https://yqfed5qb9h.execute-api.us-east-1.amazonaws.com/v1';
+// IMPORTANT: This URL has been updated to your latest Terraform output.
+const API_INVOKE_URL = 'https://j7ozjpk3ej.execute-api.us-east-1.amazonaws.com/v1';
 
 function App() {
   const [term, setTerm] = useState('');
@@ -20,6 +20,7 @@ function App() {
     setResult(null);
 
     try {
+      // Use the correct URL and the term from the input
       const response = await fetch(`${API_INVOKE_URL}/definition/${term}`);
       
       if (response.status === 404) {
