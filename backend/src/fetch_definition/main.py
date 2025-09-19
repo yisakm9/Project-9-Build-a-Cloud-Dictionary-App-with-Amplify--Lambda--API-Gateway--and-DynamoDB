@@ -2,22 +2,25 @@ import os
 import boto3
 import json
 
-# Get the table name from an environment variable
 TABLE_NAME = os.environ.get('TABLE_NAME')
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(TABLE_NAME)
 
+# Define the CORS headers in one place to reuse them
+CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*', # Allows any origin
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'OPTIONS,GET'
+}
+
 def handler(event, context):
-    """
-    Handles API Gateway requests to fetch a dictionary definition.
-    """
     print(f"Received event: {json.dumps(event)}")
-    # The 'term' is expected to be a path parameter
     term = event.get('pathParameters', {}).get('term')
 
     if not term:
         return {
             'statusCode': 400,
+            'headers': CORS_HEADERS, # Add headers
             'body': json.dumps({'error': 'Term not provided in path.'})
         }
 
@@ -28,22 +31,20 @@ def handler(event, context):
         if not item:
             return {
                 'statusCode': 404,
+                'headers': CORS_HEADERS, # Add headers
                 'body': json.dumps({'error': 'Term not found.'})
             }
 
+        # This is the successful case
         return {
             'statusCode': 200,
-            # Allow CORS for frontend integration
-            'headers': {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type',
-                'Access-Control-Allow-Methods': 'OPTIONS,GET'
-            },
+            'headers': CORS_HEADERS, # Add headers
             'body': json.dumps(item)
         }
     except Exception as e:
         print(e)
         return {
             'statusCode': 500,
+            'headers': CORS_HEADERS, # Add headers
             'body': json.dumps({'error': 'Internal server error.'})
         }
