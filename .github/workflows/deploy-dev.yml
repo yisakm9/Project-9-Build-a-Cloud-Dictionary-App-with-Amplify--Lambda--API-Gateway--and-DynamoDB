@@ -15,7 +15,6 @@ permissions:
   contents: read
 
 jobs:
-  # This job runs first to determine which parts of the app have changed.
   check-changes:
     name: Check for File Changes
     runs-on: ubuntu-latest
@@ -34,18 +33,16 @@ jobs:
             frontend:
               - 'frontend/**'
 
-  # Job to deploy the backend infrastructure
   deploy-backend:
     name: Deploy Backend
     runs-on: ubuntu-latest
     needs: check-changes
-    # This job only runs if the 'backend' filter is true.
     if: needs.check-changes.outputs.backend == 'true'
     outputs:
       api_url: ${{ steps.get_outputs.outputs.api_url }}
       table_name: ${{ steps.get_outputs.outputs.table_name }}
-      
     steps:
+      # ... (all backend steps remain exactly the same) ...
       - name: Checkout
         uses: actions/checkout@v4
       - name: Configure AWS Credentials
@@ -78,18 +75,15 @@ jobs:
           chmod +x ./data/seed_database.sh
           ./data/seed_database.sh "$TABLE_NAME"
 
-  # Job to deploy the frontend application
   deploy-frontend:
     name: Deploy Frontend
     runs-on: ubuntu-latest
     needs: [check-changes, deploy-backend]
-    # This job runs if the 'frontend' filter is true OR if the backend job just ran successfully.
     if: |
       always() && (
         needs.check-changes.outputs.frontend == 'true' ||
         needs.deploy-backend.result == 'success'
       )
-    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -99,24 +93,26 @@ jobs:
           role-to-assume: arn:aws:iam::456202167790:role/githubaction
           aws-region: us-east-1
           
-      - name: Look up Amplify App ID
-        id: lookup_app_id
-        run: |
-          APP_ID=$(aws amplify list-apps | jq -r '.apps[] | select(.name == "Project-9-intermediate-level-Cloud-Dictionary-App") | .appId')
-          echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
-          
-      - name: Update Amplify Environment and Trigger Build
+      # --- COMBINED LOOKUP, UPDATE, and TRIGGER STEP ---
+      - name: Deploy Amplify Frontend
         env:
-          # Use the backend URL if that job ran, otherwise, this will be empty and no update will happen.
           API_URL: ${{ needs.deploy-backend.outputs.api_url }}
-          APP_ID: ${{ steps.lookup_app_id.outputs.app_id }}
         run: |
-          # Only update environment variables if a new API_URL was provided
+          echo "Looking up Amplify App ID..."
+          APP_ID=$(aws amplify list-apps | jq -r '.apps[] | select(.name == "Project-9-intermediate-level-Cloud-Dictionary-App") | .appId')
+          
+          if [ -z "$APP_ID" ]; then
+            echo "::error::Could not find Amplify App ID for 'Project-9-intermediate-level-Cloud-Dictionary-App'. Aborting."
+            exit 1
+          fi
+          echo "Found Amplify App ID: $APP_ID"
+
+          # Only update environment variables if a new API_URL was provided from the backend job
           if [ -n "$API_URL" ]; then
-            echo "Updating Amplify App ID: $APP_ID with URL: $API_URL"
+            echo "Updating Amplify App ID: $APP_ID with new API URL."
             aws amplify update-app --app-id "$APP_ID" --environment-variables "VITE_API_URL=$API_URL"
           else
-            echo "No backend changes. Skipping environment variable update."
+            echo "No backend changes detected. Skipping environment variable update."
           fi
           
           echo "Starting new build for Amplify App ID: $APP_ID"
