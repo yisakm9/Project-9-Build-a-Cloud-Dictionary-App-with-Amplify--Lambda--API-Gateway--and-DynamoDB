@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - 'backend/**'
-      - 'data/**' 
+      - 'data/**' # Also trigger if the data template changes
   workflow_dispatch:
 
 permissions:
@@ -31,26 +31,25 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-            terraform_version: 1.13.1
-
+            terraform_version: 1.13.1 
       - name: Terraform Init
         run: terraform init
-        
+        working-directory: ./backend/environments/dev
 
       - name: Terraform Plan
         run: terraform plan -out=tfplan
-        
+        working-directory: ./backend/environments/dev
 
       - name: Terraform Apply
         run: terraform apply -auto-approve tfplan
-        
+        working-directory: ./backend/environments/dev
 
       - name: Get Terraform Outputs
         id: terraform_output
         run: echo "json_output=$(terraform output -json)" >> $GITHUB_OUTPUT
-        
+        working-directory: ./backend/environments/dev
 
-      # --- NEW AUTOMATED SEEDING STEP ---
+      
       - name: Seed DynamoDB Table
         env:
           TABLE_NAME: ${{ fromJson(steps.terraform_output.outputs.json_output).dynamodb_table_name.value }}
