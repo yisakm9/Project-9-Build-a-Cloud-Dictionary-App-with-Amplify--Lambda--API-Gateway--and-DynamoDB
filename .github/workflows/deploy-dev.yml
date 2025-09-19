@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'backend/**'
+      - 'data/**' 
   workflow_dispatch:
 
 permissions:
@@ -16,10 +17,7 @@ jobs:
   terraform:
     name: "Terraform Apply and Trigger Frontend"
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend/environments/dev
-
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,34 +31,41 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-            terraform_version: 1.13.1       
+            terraform_version: 1.13.1
 
       - name: Terraform Init
         run: terraform init
+        
 
       - name: Terraform Plan
         run: terraform plan -out=tfplan
+        
 
       - name: Terraform Apply
         run: terraform apply -auto-approve tfplan
+        
 
       - name: Get Terraform Outputs
         id: terraform_output
         run: echo "json_output=$(terraform output -json)" >> $GITHUB_OUTPUT
+        
 
-      # --- NEW DYNAMIC LOOKUP STEP ---
-      # This step finds the App ID based on the app's name, removing the need for a secret.
+      # --- NEW AUTOMATED SEEDING STEP ---
+      - name: Seed DynamoDB Table
+        env:
+          TABLE_NAME: ${{ fromJson(steps.terraform_output.outputs.json_output).dynamodb_table_name.value }}
+        run: |
+          echo "Starting database seed for table: $TABLE_NAME"
+          chmod +x ./data/seed_database.sh
+          ./data/seed_database.sh "$TABLE_NAME"
+
       - name: Look up Amplify App ID
         id: lookup_app_id
-        # This command must run from the root, so we remove the default working directory
-        working-directory: ./ 
         run: |
           APP_ID=$(aws amplify list-apps | jq -r '.apps[] | select(.name == "Project-9-intermediate-level-Cloud-Dictionary-App") | .appId')
           echo "Found Amplify App ID: $APP_ID"
           echo "app_id=$APP_ID" >> $GITHUB_OUTPUT
 
-      # --- UPDATED AUTOMATION STEPS ---
-      # These steps now use the output from the lookup step instead of a secret.
       - name: Update Amplify Environment Variable
         env:
           API_URL: ${{ fromJson(steps.terraform_output.outputs.json_output).api_invoke_url.value }}

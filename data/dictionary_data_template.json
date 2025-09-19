@@ -1,0 +1,26 @@
+[
+    {
+        "PutRequest": {
+            "Item": {
+                "term": {"S": "AWS"},
+                "definition": {"S": "Amazon Web Services, a comprehensive and broadly adopted cloud platform."}
+            }
+        }
+    },
+    {
+        "PutRequest": {
+            "Item": {
+                "term": {"S": "EC2"},
+                "definition": {"S": "Elastic Compute Cloud, a service that provides secure, resizable compute capacity in the cloud."}
+            }
+        }
+    },
+    {
+        "PutRequest": {
+            "Item": {
+                "term": {"S": "S3"},
+                "definition": {"S": "Simple Storage Service, an object storage service that offers industry-leading scalability, data availability, security, and performance."}
+            }
+        }
+    }
+]
