@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import './App.css';
 
-// IMPORTANT: This URL has been updated to your latest Terraform output.
-const API_INVOKE_URL = 'https://j7ozjpk3ej.execute-api.us-east-1.amazonaws.com/v1';
+// The App will now read its API URL from an environment variable
+const API_INVOKE_URL = process.env.REACT_APP_API_URL;
 
 function App() {
   const [term, setTerm] = useState('');
