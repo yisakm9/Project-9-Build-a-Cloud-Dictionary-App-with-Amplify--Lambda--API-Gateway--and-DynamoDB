@@ -4,13 +4,20 @@
 
 set -e # Exit immediately if a command exits with a non-zero status.
 
+# --- THIS IS THE FIX ---
+# This block makes the script aware of its own location.
+# It ensures that it can always find files located next to it.
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+TEMPLATE_FILE="$SCRIPT_DIR/dictionary_data_template.json"
+# --- END OF FIX ---
+
 TABLE_NAME="$1"
-TEMPLATE_FILE="dictionary_data_template.json"
 REGION="us-east-1"
 
-if [ -z "$TABLE_NAME" ]; then
-  echo "Error: Table name not provided. Usage: ./seed_database.sh <table-name>"
-  exit 1
+if [ -z "$TABLE_NAME" ];
+  then
+    echo "Error: Table name not provided. Usage: ./seed_database.sh <table-name>"
+    exit 1
 fi
 
 echo "Seeding database: ${TABLE_NAME}"
